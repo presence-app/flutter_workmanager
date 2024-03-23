@@ -19,25 +19,16 @@ import workmanager
             // This will make other plugins available during a background operation.
             GeneratedPluginRegistrant.register(with: registry)
         }
-        //All launch handlers must be registered before application finishes launching
-        //set these identifiers in info.plist
-        //example
-        //<key>BGTaskSchedulerPermittedIdentifiers</key>
-        //  	<array>
-        //  		<string>be.tramckrijte.workmanagerExample.taskId</string>
-        //  	</array>
-        //
-        /*WorkmanagerPlugin.registerTask(withIdentifier: "be.tramckrijte.workmanagerExample.taskId")
-        WorkmanagerPlugin.registerTask(withIdentifier: "be.tramckrijte.workmanagerExample.simpleTask")
-		WorkmanagerPlugin.registerTask(withIdentifier: "be.tramckrijte.workmanagerExample.rescheduledTask")
-		WorkmanagerPlugin.registerTask(withIdentifier: "be.tramckrijte.workmanagerExample.failedTask")
-		WorkmanagerPlugin.registerTask(withIdentifier: "be.tramckrijte.workmanagerExample.simpleDelayedTask")
-		WorkmanagerPlugin.registerTask(withIdentifier: "be.tramckrijte.workmanagerExample.simplePeriodicTask")
-		WorkmanagerPlugin.registerTask(withIdentifier: "be.tramckrijte.workmanagerExample.simplePeriodic1HourTask")*/
 
-		//important to register backgroundprocessingtask in Runner/AppDelegate and info.plist
-		WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "app.workmanagerExample.iOSBackgroundAppRefresh")
-        WorkmanagerPlugin.registerBGProcessingTask(withIdentifier:  "app.workmanagerExample.iOSBackgroundProcessingTask")
+        WorkmanagerPlugin.registerBGProcessingTask(withIdentifier: "be.tramckrijte.workmanagerExample.taskId")
+        WorkmanagerPlugin.registerBGProcessingTask(withIdentifier: "be.tramckrijte.workmanagerExample.rescheduledTask")
+        WorkmanagerPlugin.registerBGProcessingTask(withIdentifier: "be.tramckrijte.workmanagerExample.simpleDelayedTask")
+        WorkmanagerPlugin.registerBGProcessingTask(withIdentifier:  "be.tramckrijte.workmanagerExample.iOSBackgroundProcessingTask")
+
+        // When this task is scheduled from dart it will run with minimum 20 minute frequency. The
+        // frequency is not guaranteed rather iOS will schedule it as per user's App usage pattern.
+        // If frequency is not provided it will default to 15 minutes
+        WorkmanagerPlugin.registerPeriodicTask(withIdentifier: "be.tramckrijte.workmanagerExample.iOSBackgroundAppRefresh", frequency: NSNumber(value: 20 * 60))
 
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
 

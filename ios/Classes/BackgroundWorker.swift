@@ -8,37 +8,43 @@
 import Foundation
 
 enum BackgroundMode {
-    case backgroundAppRefresh
-    case backgroundProcessingTask
-    case backgroundOnOffTask(identifier: String)
+    case backgroundFetch
+    case backgroundProcessingTask(identifier: String)
+    case backgroundPeriodicTask(identifier: String)
+    case backgroundOneOffTask(identifier: String)
 
     var flutterThreadlabelPrefix: String {
         switch self {
-        case .backgroundAppRefresh:
-            return "\(SwiftWorkmanagerPlugin.identifier).BackgroundAppRefreshTask"
+        case .backgroundFetch:
+            return "\(SwiftWorkmanagerPlugin.identifier).BackgroundFetch"
         case .backgroundProcessingTask:
             return "\(SwiftWorkmanagerPlugin.identifier).BackgroundProcessingTask"
-        case .backgroundOnOffTask:
-            return "\(SwiftWorkmanagerPlugin.identifier).OnOffTask"
+        case .backgroundPeriodicTask:
+            return "\(SwiftWorkmanagerPlugin.identifier).BackgroundPeriodicTask"
+        case .backgroundOneOffTask:
+            return "\(SwiftWorkmanagerPlugin.identifier).OneOffTask"
         }
     }
 
     var onResultSendArguments: [String: String] {
         switch self {
-        case .backgroundAppRefresh:
-            return ["\(SwiftWorkmanagerPlugin.identifier).DART_TASK": "iOSBackgroundAppRefresh"]
-        case .backgroundProcessingTask:
-            return ["\(SwiftWorkmanagerPlugin.identifier).DART_TASK": "iOSBackgroundProcessingTask"]
-        case let .backgroundOnOffTask(identifier):
+        case .backgroundFetch:
+            return ["\(SwiftWorkmanagerPlugin.identifier).DART_TASK": "iOSPerformFetch"]
+        case let .backgroundProcessingTask(identifier):
+            return ["\(SwiftWorkmanagerPlugin.identifier).DART_TASK": identifier]
+        case let .backgroundPeriodicTask(identifier):
+            return ["\(SwiftWorkmanagerPlugin.identifier).DART_TASK": identifier]
+        case let .backgroundOneOffTask(identifier):
             return ["\(SwiftWorkmanagerPlugin.identifier).DART_TASK": identifier]
         }
     }
 }
 
 class BackgroundWorker {
+
     let backgroundMode: BackgroundMode
-    let inputData: String
     let flutterPluginRegistrantCallback: FlutterPluginRegistrantCallback?
+    let inputData: String
 
     init(mode: BackgroundMode, inputData: String, flutterPluginRegistrantCallback: FlutterPluginRegistrantCallback?) {
         backgroundMode = mode
@@ -56,14 +62,22 @@ class BackgroundWorker {
     @discardableResult
     func performBackgroundRequest(_ completionHandler: @escaping (UIBackgroundFetchResult) -> Void) -> Bool {
         guard let callbackHandle = UserDefaultsHelper.getStoredCallbackHandle(),
-              let flutterCallbackInformation = FlutterCallbackCache.lookupCallbackInformation(callbackHandle)
-        else {
-            logError("[\(String(describing: self))] \(WMPError.workmanagerNotInitialized.message)")
-            completionHandler(.failed)
-            return false
+            let flutterCallbackInformation = FlutterCallbackCache.lookupCallbackInformation(callbackHandle)
+            else {
+                logError("[\(String(describing: self))] \(WMPError.workmanagerNotInitialized.message)")
+                completionHandler(.failed)
+                return false
         }
 
         let taskSessionStart = Date()
+        let taskSessionIdentifier = UUID()
+
+        let debugHelper = DebugNotificationHelper(taskSessionIdentifier)
+        debugHelper.showStartFetchNotification(
+            startDate: taskSessionStart,
+            callBackHandle: callbackHandle,
+            callbackInfo: flutterCallbackInformation
+        )
 
         var flutterEngine: FlutterEngine? = FlutterEngine(
             name: backgroundMode.flutterThreadlabelPrefix,
@@ -91,13 +105,11 @@ class BackgroundWorker {
         backgroundMethodChannel?.setMethodCallHandler { call, result in
             switch call.method {
             case BackgroundChannel.initialized:
-                result(true) // Agree to Flutter's method invocation
-                    var arguments = self.backgroundMode.onResultSendArguments
-                    if self.inputData != ""{
-                        arguments = arguments.merging(["be.tramckrijte.workmanager.INPUT_DATA": self.inputData]) { current, _ in current }
-                        logDebug("[\(String(describing: self))] \(#function) -> BackgroundWorker.backgroundMethodChannel \(arguments.debugDescription) will called. INPUT_DATA: \(self.inputData)")
-
-                    }
+                result(true)    // Agree to Flutter's method invocation
+                var arguments = self.backgroundMode.onResultSendArguments
+                if self.inputData != "" {
+                    arguments = arguments.merging(["be.tramckrijte.workmanager.INPUT_DATA": self.inputData]) { current, _ in current }
+                }
 
                 backgroundMethodChannel?.invokeMethod(
                     BackgroundChannel.onResultSendCommand,
@@ -109,6 +121,11 @@ class BackgroundWorker {
                         let taskDuration = taskSessionCompleter.timeIntervalSince(taskSessionStart)
                         logInfo("[\(String(describing: self))] \(#function) -> performBackgroundRequest.\(result) (finished in \(taskDuration.formatToSeconds()))")
 
+                        debugHelper.showCompletedFetchNotification(
+                            completedDate: taskSessionCompleter,
+                            result: result,
+                            elapsedTime: taskDuration
+                        )
                         completionHandler(result)
                     })
             default:

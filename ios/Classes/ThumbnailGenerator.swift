@@ -6,10 +6,11 @@
 //
 
 import Foundation
-import UIKit
 import UserNotifications
+import UIKit
 
 struct ThumbnailGenerator {
+
     enum ThumbnailIcon {
         case startWork
         case success
@@ -30,10 +31,6 @@ struct ThumbnailGenerator {
     static func createThumbnail(with icon: ThumbnailIcon) -> UNNotificationAttachment? {
         let name = "thumbnail"
         let thumbnailFrame = CGRect(x: 0, y: 0, width: 150, height: 150)
-        // TODO: use this only on mainthread
-        // causes [Animation] +[UIView setAnimationsEnabled:] being called from a background thread.
-        // Performing any operation from a background thread on UIView or a subclass is not supported
-        // and may result in unexpected and insidious behavior.
         let thumbnail = UIView(frame: thumbnailFrame)
         thumbnail.isOpaque = false
         let label = UILabel(frame: thumbnailFrame)
@@ -54,22 +51,25 @@ struct ThumbnailGenerator {
             logInfo("\(logPrefix) \(#function) something went wrong creating a thumbnail for local debug notification")
             return nil
         }
+
     }
 
     private static var logPrefix: String {
         return "\(String(describing: SwiftWorkmanagerPlugin.self)) - \(ThumbnailGenerator.self)"
     }
+
 }
 
 private extension UIView {
+
     func renderAsImage() throws -> UIImage {
-        UIGraphicsBeginImageContextWithOptions(bounds.size, isOpaque, 0.0)
+        UIGraphicsBeginImageContextWithOptions(self.bounds.size, self.isOpaque, 0.0)
         defer { UIGraphicsEndImageContext() }
 
         guard let context = UIGraphicsGetCurrentContext() else {
             throw GraphicsError.noCurrentGraphicsContextFound
         }
-        layer.render(in: context)
+        self.layer.render(in: context)
         guard let image = UIGraphicsGetImageFromCurrentImageContext() else {
             throw GraphicsError.noCurrentGraphicsContextFound
         }
@@ -83,18 +83,21 @@ private extension UIView {
 }
 
 private extension UIImage {
+
     func persist(fileName: String, in directory: URL = URL(fileURLWithPath: NSTemporaryDirectory())) throws -> URL {
         let directoryURL = directory.appendingPathComponent(SwiftWorkmanagerPlugin.identifier, isDirectory: true)
         let fileURL = directoryURL.appendingPathComponent("\(fileName).png")
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true, attributes: nil)
-        guard let imageData = pngData() else {
+        guard let imageData = self.pngData() else {
             throw ImageError.cannotRepresentAsPNG(self)
         }
         try imageData.write(to: fileURL)
+
         return fileURL
     }
 
     enum ImageError: Error {
         case cannotRepresentAsPNG(UIImage)
     }
+
 }

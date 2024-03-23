@@ -16,15 +16,16 @@
     [SwiftWorkmanagerPlugin setPluginRegistrantCallback:callback];
 }
 
+// TODO this might not be needed anymore
 + (void)registerTaskWithIdentifier:(NSString *) taskIdentifier {
     if (@available(iOS 13, *)) {
         [SwiftWorkmanagerPlugin registerBGProcessingTaskWithIdentifier:taskIdentifier];
     }
 }
 
-+ (void)registerPeriodicTaskWithIdentifier:(NSString *)taskIdentifier{
++ (void)registerPeriodicTaskWithIdentifier:(NSString *)taskIdentifier frequency:(NSNumber *) frequency {
     if (@available(iOS 13, *)) {
-        [SwiftWorkmanagerPlugin registerAppRefreshTaskWithIdentifier:taskIdentifier];
+        [SwiftWorkmanagerPlugin registerPeriodicTaskWithIdentifier:taskIdentifier frequency:frequency];
     }
 }
 
