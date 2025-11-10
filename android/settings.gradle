@@ -1,1 +1,21 @@
-rootProject.name = 'workmanager'
+pluginManagement {
+    def props = new Properties()
+    def file = file("local.properties")
+    assert file.exists()
+    file.withInputStream { props.load(it) }
+
+    def flutterSdk = props.getProperty("flutter.sdk")
+    assert flutterSdk != null
+
+    includeBuild("$flutterSdk/packages/flutter_tools/gradle")
+
+    repositories { google(); mavenCentral(); gradlePluginPortal() }
+}
+
+plugins {
+    id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+    id "com.android.library"          version "8.6.1" apply false
+    id "org.jetbrains.kotlin.android" version "2.1.0" apply false
+}
+
+include ":app"
