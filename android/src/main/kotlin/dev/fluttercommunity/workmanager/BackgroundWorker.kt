@@ -25,11 +25,11 @@ class BackgroundWorker(
     applicationContext: Context,
     private val workerParams: WorkerParameters,
 ) : ListenableWorker(applicationContext, workerParams), MethodChannel.MethodCallHandler {
+
     private lateinit var backgroundChannel: MethodChannel
 
     companion object {
         const val TAG = "BackgroundWorker"
-
         const val PAYLOAD_KEY = "be.tramckrijte.workmanager.INPUT_DATA"
         const val DART_TASK_KEY = "be.tramckrijte.workmanager.DART_TASK"
         const val IS_IN_DEBUG_MODE_KEY = "be.tramckrijte.workmanager.IS_IN_DEBUG_MODE_KEY"
@@ -41,20 +41,13 @@ class BackgroundWorker(
         private val flutterLoader = FlutterLoader()
     }
 
-    private val payload
-        get() = workerParams.inputData.getString(PAYLOAD_KEY)
-
-    private val dartTask
-        get() = workerParams.inputData.getString(DART_TASK_KEY)!!
-
-    private val isInDebug
-        get() = workerParams.inputData.getBoolean(IS_IN_DEBUG_MODE_KEY, false)
+    private val payload get() = workerParams.inputData.getString(PAYLOAD_KEY)
+    private val dartTask: String? get() = workerParams.inputData.getString(DART_TASK_KEY)
+    private val isInDebug get() = workerParams.inputData.getBoolean(IS_IN_DEBUG_MODE_KEY, false)
 
     private val randomThreadIdentifier = Random().nextInt()
     private var engine: FlutterEngine? = null
-
     private var startTime: Long = 0
-
     private var completer: CallbackToFutureAdapter.Completer<Result>? = null
 
     private var resolvableFuture =
@@ -75,17 +68,26 @@ class BackgroundWorker(
         flutterLoader.ensureInitializationCompleteAsync(
             applicationContext,
             null,
-            Handler(Looper.getMainLooper()),
+            Handler(Looper.getMainLooper())
         ) {
+            val task = dartTask
             val callbackHandle = SharedPreferenceHelper.getCallbackHandle(applicationContext)
             val callbackInfo = FlutterCallbackInformation.lookupCallbackInformation(callbackHandle)
+
+            // RETRY if callback info or dartTask not ready
+            if (callbackHandle == 0L || callbackInfo == null || task == null) {
+                Log.w(TAG, "Callback not ready, retrying task: $task")
+                this.completer?.set(Result.retry())
+                return@ensureInitializationCompleteAsync
+            }
+
             val dartBundlePath = flutterLoader.findAppBundlePath()
 
             if (isInDebug) {
                 DebugHelper.postTaskStarting(
                     applicationContext,
                     randomThreadIdentifier,
-                    dartTask,
+                    task,
                     payload,
                     callbackHandle,
                     callbackInfo,
@@ -102,7 +104,7 @@ class BackgroundWorker(
                         applicationContext.assets,
                         dartBundlePath,
                         callbackInfo,
-                    ),
+                    )
                 )
             }
         }
@@ -117,59 +119,50 @@ class BackgroundWorker(
     private fun stopEngine(result: Result?) {
         val fetchDuration = System.currentTimeMillis() - startTime
 
-        if (isInDebug) {
+        val task = dartTask
+        if (isInDebug && task != null) {
             DebugHelper.postTaskCompleteNotification(
                 applicationContext,
                 randomThreadIdentifier,
-                dartTask,
+                task,
                 payload,
                 fetchDuration,
                 result ?: Result.failure(),
             )
         }
 
-        // No result indicates we were signalled to stop by WorkManager.  The result is already
-        // STOPPED, so no need to resolve another one.
         if (result != null) {
             this.completer?.set(result)
         }
 
-        // If stopEngine is called from `onStopped`, it may not be from the main thread.
         Handler(Looper.getMainLooper()).post {
             engine?.destroy()
             engine = null
         }
     }
 
-    override fun onMethodCall(
-        call: MethodCall,
-        r: MethodChannel.Result,
-    ) {
+    override fun onMethodCall(call: MethodCall, r: MethodChannel.Result) {
+        val task = dartTask
         when (call.method) {
-            BACKGROUND_CHANNEL_INITIALIZED ->
-                backgroundChannel.invokeMethod(
-                    "onResultSend",
-                    mapOf(DART_TASK_KEY to dartTask, PAYLOAD_KEY to payload),
-                    object : MethodChannel.Result {
-                        override fun notImplemented() {
-                            stopEngine(Result.failure())
-                        }
+            BACKGROUND_CHANNEL_INITIALIZED -> backgroundChannel.invokeMethod(
+                "onResultSend",
+                mapOf(DART_TASK_KEY to task, PAYLOAD_KEY to payload),
+                object : MethodChannel.Result {
+                    override fun notImplemented() {
+                        stopEngine(Result.failure())
+                    }
 
-                        override fun error(
-                            errorCode: String,
-                            errorMessage: String?,
-                            errorDetails: Any?,
-                        ) {
-                            Log.e(TAG, "errorCode: $errorCode, errorMessage: $errorMessage")
-                            stopEngine(Result.failure())
-                        }
+                    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                        Log.e(TAG, "errorCode: $errorCode, errorMessage: $errorMessage")
+                        stopEngine(Result.failure())
+                    }
 
-                        override fun success(receivedResult: Any?) {
-                            val wasSuccessFul = receivedResult?.let { it as Boolean? } == true
-                            stopEngine(if (wasSuccessFul) Result.success() else Result.retry())
-                        }
-                    },
-                )
+                    override fun success(receivedResult: Any?) {
+                        val wasSuccessFul = receivedResult?.let { it as Boolean? } == true
+                        stopEngine(if (wasSuccessFul) Result.success() else Result.retry())
+                    }
+                }
+            )
         }
     }
 }
